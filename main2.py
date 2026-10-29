@@ -552,15 +552,30 @@ class Orbital:
             self.draw_menu_button("START GAME", (490, 315, 300, 58), "start", True)
             self.draw_menu_button("SETTINGS", (490, 390, 300, 54), "settings")
             self.draw_menu_button("QUIT", (490, 460, 300, 50), "quit")
-            self.draw_text("A journey through gravity, fuel and the stars.", (640, 570), "#7898b1", small=True, center=True)
+            self.draw_text(
+            "A journey through gravity, fuel and the stars.",
+            (640, 570),
+            "#7898b1",
+            small=True,
+            center=True,
+        )
 
         elif self.screen_state == "settings":
             self.draw_text("SETTINGS", (640, 95), "#e7f4ff", title=True, center=True)
             self.draw_text("Difficulty", (640, 157), "#91b8d2", center=True)
-            self.draw_text(f"Starting fuel: {self.fuel_setting}%", (640, 207), "#edf8ff", center=True)
+            self.draw_text(
+            f"Starting fuel: {self.fuel_setting}%",
+            (640, 207),
+            "#edf8ff",
+            center=True,
+        )
             self.draw_menu_button("-", (405, 230, 70, 42), "fuel_down")
             self.draw_menu_button("+", (805, 230, 70, 42), "fuel_up")
-            scale_label = {0.8: "Small", 1.0: "Normal", 1.2: "Large"}.get(self.planet_scale, "Normal")
+            scale_label = {
+            0.8: "Small",
+            1.0: "Normal",
+            1.2: "Large",
+        }.get(self.planet_scale, "Normal")
             self.draw_text(f"Planet size: {scale_label}", (640, 296), "#edf8ff", center=True)
             self.draw_menu_button("<", (405, 319, 70, 42), "planet_down")
             self.draw_menu_button(">", (805, 319, 70, 42), "planet_up")
@@ -568,28 +583,70 @@ class Orbital:
             self.draw_text(f"Level timer: {timer_label}", (640, 385), "#edf8ff", center=True)
             self.draw_menu_button("<", (405, 408, 70, 42), "timer_down")
             self.draw_menu_button(">", (805, 408, 70, 42), "timer_up")
-            self.draw_text(f"Music volume: {round(self.music_volume * 100)}%", (640, 474), "#edf8ff", center=True)
+            self.draw_text(
+            f"Music volume: {round(self.music_volume * 100)}%",
+            (640, 474),
+            "#edf8ff",
+            center=True,
+        )
             self.draw_menu_button("-", (405, 497, 70, 42), "volume_down")
             self.draw_menu_button("+", (805, 497, 70, 42), "volume_up")
             self.draw_menu_button("CREDITS", (490, 560, 145, 48), "credits")
             self.draw_menu_button("BACK", (645, 560, 145, 48), "back")
-            self.draw_text("Changes apply when you start or restart a sector.", (640, 635), "#7898b1", small=True, center=True)
+            self.draw_text(
+            "Changes apply when you start or restart a sector.",
+            (640, 635),
+            "#7898b1",
+            small=True,
+            center=True,
+        )
 
         elif self.screen_state == "credits":
             self.draw_text("CREDITS", (640, 180), "#e7f4ff", title=True, center=True)
             self.draw_text("Music: Juhani Junkala", (640, 280), "#edf8ff", center=True)
-            self.draw_text("Retro Game Music Pack (CC0)", (640, 315), "#91b8d2", small=True, center=True)
+            self.draw_text(
+            "Retro Game Music Pack (CC0)",
+            (640, 315),
+            "#91b8d2",
+            small=True,
+            center=True,
+        )
             self.draw_text("Game by Mighty1E", (640, 355), "#edf8ff", center=True)
             self.draw_menu_button("BACK TO SETTINGS", (490, 435, 300, 54), "credits_back", True)
 
         elif self.screen_state == "tutorial":
             self.draw_text("YOUR MISSION", (640, 105), "#e7f4ff", title=True, center=True)
-            self.draw_text("Collect every glowing energy core in the sector.", (640, 205), "#edf8ff", center=True)
-            self.draw_text("Then fly into the gate to reach the next sector.", (640, 245), "#edf8ff", center=True)
-            self.draw_text("Avoid planets and stay inside the screen.", (640, 285), "#edf8ff", center=True)
+            self.draw_text(
+            "Collect every glowing energy core in the sector.",
+            (640, 205),
+            "#edf8ff",
+            center=True,
+        )
+            self.draw_text(
+            "Then fly into the gate to reach the next sector.",
+            (640, 245),
+            "#edf8ff",
+            center=True,
+        )
+            self.draw_text(
+            "Avoid planets and stay inside the screen.",
+            (640, 285),
+            "#edf8ff",
+            center=True,
+        )
             self.draw_text("WASD or arrow keys: thrust / steer", (640, 365), "#91dce8", center=True)
-            self.draw_text("M: mute or unmute music     ESC: restart sector", (640, 405), "#91dce8", center=True)
-            self.draw_text("Collecting a core restores some fuel.", (640, 455), "#edf8ff", center=True)
+            self.draw_text(
+            "M: mute or unmute music     ESC: restart sector",
+            (640, 405),
+            "#91dce8",
+            center=True,
+        )
+            self.draw_text(
+            "Collecting a core restores some fuel.",
+            (640, 455),
+            "#edf8ff",
+            center=True,
+        )
             self.draw_menu_button("LET'S FLY", (490, 525, 300, 56), "tutorial_start", True)
 
     def handle_menu_click(self, position):
@@ -1032,7 +1089,10 @@ class Orbital:
                         if event.key == pygame.K_ESCAPE:
                             self.screen_state = self.settings_return
                         elif event.key in (pygame.K_LEFT, pygame.K_RIGHT):
-                            self.music_volume = min(1.0, max(0.0, self.music_volume + (0.05 if event.key == pygame.K_RIGHT else -0.05)))
+                            volume_step = 0.05 if event.key == pygame.K_RIGHT else -0.05
+                            self.music_volume = min(
+                                1.0, max(0.0, self.music_volume + volume_step)
+                            )
                             pygame.mixer.music.set_volume(self.music_volume)
                     elif self.screen_state == "credits":
                         if event.key in (pygame.K_ESCAPE, pygame.K_RETURN, pygame.K_SPACE):
@@ -1064,7 +1124,10 @@ class Orbital:
                             self.screen_state = "title"
 
                         # Move to the next sector or retry after losing.
-                        elif event.key in (pygame.K_RETURN, pygame.K_SPACE) and (self.dead or self.won):
+                        elif (
+                            event.key in (pygame.K_RETURN, pygame.K_SPACE)
+                            and (self.dead or self.won)
+                        ):
                             if self.won and self.level_index < len(LEVELS) - 1:
                                 self.level_index += 1
                             self.load_level()
@@ -1077,8 +1140,3 @@ class Orbital:
 # Start the game.
 if __name__ == "__main__":
     Orbital().run()
-
-
-
-
-
