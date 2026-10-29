@@ -1,24 +1,21 @@
-"""ORBITAL — a small Pygame gravity arcade game for Hack Club Snek."""
+﻿"""ORBITAL” a small Pygame gravity arcade game for Hack Club Snek."""
 
 import math
 import sys
-import tempfile
-import wave
 from array import array
 from pathlib import Path
 
 import pygame
 
 
-WIDTH, HEIGHT = 1280, 720  # window size
-FPS = 60  # target frames per second
-SHIP_RADIUS = 12  # hitbox radius used for planet crashes
-THRUST = 390.0  # how hard WASD/arrows push the ship
-GRAVITY = 9000.0  # how strongly planets pull
-MAX_SPEED = 620.0  # speed cap so the ship can't fly off forever
-FUEL_DRAIN = 14.0  # fuel used per second while thrusting
+WIDTH, HEIGHT = 1280, 720
+FPS = 60
+SHIP_RADIUS = 12
+THRUST = 390.0
+GRAVITY = 9000.0
+MAX_SPEED = 620.0
+FUEL_DRAIN = 14.0
 
-# Each dict is one sector: spawn point, planets, cores to collect, exit gate.
 LEVELS = [
     {
         "spawn": (160, 535),
@@ -47,7 +44,7 @@ LEVELS = [
 
 class Orbital:
     def __init__(self) -> None:
-        pygame.mixer.pre_init(22_050, -16, 2, 512)  # smaller audio buffer = less lag
+        pygame.mixer.pre_init(22_050, -16, 2, 512)
         pygame.init()
         pygame.display.set_caption("ORBITAL")
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -55,93 +52,56 @@ class Orbital:
         self.font = pygame.font.Font(None, 28)
         self.title_font = pygame.font.Font(None, 44)
         self.small_font = pygame.font.Font(None, 22)
-        # Fixed star positions so the background stays the same every run.
         self.stars = [
             ((i * 179) % 1260 + 10, (i * 83) % 690 + 10, 1 + i % 3)
             for i in range(90)
         ]
-        self.ship_sprite = self.create_ship_sprite()
-        self.music_tracks = self.create_music_tracks()
+        self.asset_folder = Path(__file__).resolve().parent / "assets"
+        ship_path = self.asset_folder / "ship.png"
+        if not ship_path.is_file():
+            raise FileNotFoundError(
+                f"Missing ship sprite: {ship_path}. "
+                "Save a ship PNG from the asset pack as assets/ship.png."
+            )
+        self.ship_sprite = pygame.image.load(str(ship_path)).convert_alpha()
+        self.ship_sprite = pygame.transform.smoothscale(self.ship_sprite, (42, 30))
+        self.music_tracks = self.load_music_tracks()
         self.music_channels: list[pygame.mixer.Channel | None] = []
         self.level_index = 0
         self.load_level()
 
-    def create_music_tracks(self) -> list[pygame.mixer.Sound]:
-        # Build 3 looping sine-wave layers in memory (no music files needed).
+    def load_music_tracks(self) -> list[pygame.mixer.Sound]:
+        """Load the three music layers from the assets folder."""
         if not pygame.mixer.get_init():
             return []
 
-        sample_rate = 22_050
-        notes = [220.0, 261.63, 329.63, 293.66, 196.0, 246.94, 293.66, 261.63]
+        music_folder = self.asset_folder / "music"
         tracks = []
-        for layer in range(3):
-            samples = array("h")
-            for frame in range(sample_rate * 8):  # 8-second loop
-                time = frame / sample_rate
-                step = int(time * 2) % len(notes)  # which note in the pattern
-                phase = time % 0.5
-                fade = min(1.0, phase * 11) * max(0.0, 1.0 - max(0.0, phase - 0.32) * 4)
-                root = notes[step]
-                if layer == 0:  # bass
-                    sound = math.sin(math.tau * (root / 4) * time) * 0.10
-                    sound += math.sin(math.tau * (root / 2) * time) * 0.045
-                elif layer == 1:  # plucked melody
-                    sound = math.sin(math.tau * root * time) * 0.11 * fade
-                    sound += math.sin(math.tau * root * 2.01 * time) * 0.025 * fade
-                else:  # extra harmony for later sectors
-                    slow_fade = min(1.0, (time % 2.0) * 2.0)
-                    sound = math.sin(math.tau * (root / 2) * time) * 0.07 * slow_fade
-                    sound += math.sin(math.tau * root * 1.5 * time) * 0.035 * slow_fade
-                value = int(max(-1.0, min(1.0, sound)) * 32767)  # 16-bit sample
-                samples.extend((value, value))  # stereo: same value L/R
-            music_path = Path(tempfile.gettempdir()) / f"orbital_loop_{layer}.wav"
+        for filename in ("ambient.ogg", "bass.ogg", "melody.ogg"):
+            path = music_folder / filename
+            if not path.is_file():
+                print(f"Music layer not found: {path}")
+                return []
             try:
-                with wave.open(str(music_path), "wb") as audio_file:
-                    audio_file.setnchannels(2)
-                    audio_file.setsampwidth(2)
-                    audio_file.setframerate(sample_rate)
-                    audio_file.writeframes(samples.tobytes())
-                track = pygame.mixer.Sound(str(music_path))
-                track.set_volume((0.55, 0.34, 0.24)[layer])
-                tracks.append(track)
-            except (pygame.error, OSError):
-                return tracks  # skip remaining layers if audio fails
+                tracks.append(pygame.mixer.Sound(str(path)))
+            except pygame.error as error:
+                print(f"Could not load music {path}: {error}")
+                return []
         return tracks
-
     def play_music_for_level(self) -> None:
-        # Play one extra layer per sector (0, then 0+1, then all 3).
-        for channel in self.music_channels:
-            if channel:
-                channel.stop()
-        self.music_channels = []
-        for index, track in enumerate(self.music_tracks):
-            if index <= self.level_index:
+        # Keep all layers running so they stay in time between sectors.
+        if not self.music_channels:
+            for track in self.music_tracks:
                 self.music_channels.append(track.play(loops=-1))
-
-    def create_ship_sprite(self) -> pygame.Surface:
-        # Pixel art ship facing right. Letters map to colours below.
-        sprite = pygame.Surface((42, 30), pygame.SRCALPHA)
-        pixels = [
-            "..............",
-            ".......D......",
-            ".....DDDD.....",
-            "...DDWWWDD....",
-            ".DDWCCCCCWDD..",
-            "DDDDRRRRRDDDD.",
-            ".DDWCCCCCWDD..",
-            "...DDWWWDD....",
-            ".....DDDD.....",
-            ".......D......",
-        ]
-        palette = {"D": "#302c2c", "W": "#d5eef2", "C": "#77a8c7", "R": "#f28f6b"}
-        for row, line in enumerate(pixels):
-            for column, pixel in enumerate(line):
-                if pixel != ".":
-                    pygame.draw.rect(sprite, palette[pixel], (column * 3, row * 3, 3, 3))
-        return sprite
-
+        volumes = [0.45, 0.0, 0.0]
+        if self.level_index >= 1:
+            volumes[1] = 0.35
+        if self.level_index >= 2:
+            volumes[2] = 0.30
+        for index, channel in enumerate(self.music_channels):
+            if channel:
+                channel.set_volume(volumes[index])
     def load_level(self) -> None:
-        # Reset ship, planets, cores, fuel, and messages for the current sector.
         self.play_music_for_level()
         level = LEVELS[self.level_index]
         self.ship_position = pygame.Vector2(level["spawn"])
@@ -161,12 +121,10 @@ class Orbital:
         self.game_complete = False
 
     def update(self, delta: float) -> None:
-        # Move the ship, apply gravity, and check collisions. Skip if paused.
         if self.dead or self.won:
             return
 
         keys = pygame.key.get_pressed()
-        # WASD / arrows: +1 right/down, -1 left/up.
         direction = pygame.Vector2(
             int(keys[pygame.K_d] or keys[pygame.K_RIGHT])
             - int(keys[pygame.K_a] or keys[pygame.K_LEFT]),
@@ -176,17 +134,19 @@ class Orbital:
         if direction.length_squared() and self.fuel > 0:
             direction = direction.normalize()
             self.ship_velocity += direction * THRUST * delta
-            # Kill some sideways slide so thrusting feels less slippery.
+            # A small side-thruster assist removes the frustrating sideways slide
+            # while still leaving enough momentum for orbital routes.
             sideways_velocity = self.ship_velocity - direction * self.ship_velocity.dot(direction)
             self.ship_velocity -= sideways_velocity * min(0.75 * delta, 0.12)
             self.fuel = max(0.0, self.fuel - FUEL_DRAIN * delta)
 
-        # Light drag so the ship doesn't keep accelerating forever.
+        # Light stabilisers make the ship much easier to steer while preserving
+        # the momentum needed for satisfying gravity slingshots.
         self.ship_velocity *= 0.993 ** (delta * 60)
 
         for planet_position, radius, _colour in self.planets:
             offset = planet_position - self.ship_position
-            distance_squared = max(offset.length_squared(), 2500.0)  # stop gravity exploding up close
+            distance_squared = max(offset.length_squared(), 2500.0)
             self.ship_velocity += (
                 offset.normalize() * GRAVITY * radius / distance_squared * delta
             )
@@ -197,7 +157,6 @@ class Orbital:
         if self.ship_velocity.length() > MAX_SPEED:
             self.ship_velocity.scale_to_length(MAX_SPEED)
         if self.ship_velocity.length() > 12:
-            # Point the sprite toward the current flight direction.
             target_angle = -math.degrees(math.atan2(self.ship_velocity.y, self.ship_velocity.x))
             angle_difference = (target_angle - self.ship_angle + 180) % 360 - 180
             self.ship_angle += angle_difference * min(9.0 * delta, 1.0)
@@ -225,16 +184,7 @@ class Orbital:
         self.dead = True
         self.message = message
 
-    def draw_text(
-        self,
-        text: str,
-        position: tuple[int, int],
-        colour: str | pygame.Color,
-        *,
-        small: bool = False,
-        title: bool = False,
-        center: bool = False,
-    ) -> None:
+    def draw_text(self, text: str, position: tuple[int, int], colour: str | pygame.Color, *, small: bool = False, title: bool = False, center: bool = False) -> None:
         font = self.title_font if title else self.small_font if small else self.font
         surface = font.render(text, True, colour)
         rect = surface.get_rect(center=position) if center else surface.get_rect(topleft=position)
@@ -252,7 +202,6 @@ class Orbital:
             self.draw_wobbly_circle(core, 16, pygame.Color("#ffdf6c"), 37, outline=4)
             self.draw_wobbly_circle(core - pygame.Vector2(3, 4), 7, pygame.Color("#fff5bf"), 38)
 
-        # Gate is grey until all cores are gone, then green.
         gate_colour = pygame.Color("#69f0ae") if not self.cores else pygame.Color("#536475")
         self.draw_wobbly_circle(self.gate, 28, gate_colour, 17, outline=5, fill=False)
         self.draw_wobbly_circle(self.gate, 38, pygame.Color(*gate_colour[:3], 65), 18, outline=3, fill=False)
@@ -282,17 +231,7 @@ class Orbital:
 
         pygame.display.flip()
 
-    def draw_wobbly_circle(
-        self,
-        position: pygame.Vector2,
-        radius: float,
-        colour: pygame.Color,
-        seed: int,
-        *,
-        outline: int = 0,
-        fill: bool = True,
-    ) -> None:
-        # Circle made of 18 points, slightly offset so it looks uneven.
+    def draw_wobbly_circle(self, position: pygame.Vector2, radius: float, colour: pygame.Color, seed: int, *, outline: int = 0, fill: bool = True) -> None:
         points = []
         for index in range(18):
             angle = math.tau * index / 18
@@ -312,23 +251,23 @@ class Orbital:
         light = colour.lerp(pygame.Color("#ffffff"), 0.24)
         dark = colour.lerp(pygame.Color("#302c2c"), 0.24)
 
-        if style == 0:  # crater spots
+        if style == 0:
             for offset, size in [((-0.25, -0.28), 0.17), ((0.27, 0.11), 0.12), ((-0.1, 0.32), 0.09)]:
                 centre = position + pygame.Vector2(offset[0] * radius, offset[1] * radius)
                 self.draw_wobbly_circle(centre, radius * size, light, int(radius * size), outline=3)
-                self.draw_wobbly_circle(centre + pygame.Vector2(2, 3), radius * size * 0.42, dark, int(radius * size + 1), outline=2)
-        elif style == 1:  # stripe bands
-            for line in (-0.35, -0.1, 0.16, 0.4):
+                self.draw_wobbly_circle(centre + pygame.Vector2(2, 3), radius * size * .42, dark, int(radius * size + 1), outline=2)
+        elif style == 1:
+            for line in (-.35, -.1, .16, .4):
                 y = position.y + line * radius
-                pygame.draw.line(self.screen, dark, (position.x - radius * 0.72, y), (position.x + radius * 0.72, y - radius * 0.14), 7)
-                pygame.draw.line(self.screen, "#302c2c", (position.x - radius * 0.72, y), (position.x + radius * 0.72, y - radius * 0.14), 2)
-        else:  # ring + spots
-            ring_rect = pygame.Rect(int(position.x - radius * 1.33), int(position.y - radius * 0.43), int(radius * 2.66), int(radius * 0.86))
+                pygame.draw.line(self.screen, dark, (position.x - radius * .72, y), (position.x + radius * .72, y - radius * .14), 7)
+                pygame.draw.line(self.screen, "#302c2c", (position.x - radius * .72, y), (position.x + radius * .72, y - radius * .14), 2)
+        else:
+            ring_rect = pygame.Rect(int(position.x - radius * 1.33), int(position.y - radius * .43), int(radius * 2.66), int(radius * .86))
             pygame.draw.ellipse(self.screen, "#302c2c", ring_rect, 7)
             pygame.draw.ellipse(self.screen, light, ring_rect, 3)
-            for offset in ((-0.27, -0.18), (0.22, 0.24), (0.33, -0.13)):
+            for offset in ((-.27, -.18), (.22, .24), (.33, -.13)):
                 centre = position + pygame.Vector2(offset[0] * radius, offset[1] * radius)
-                self.draw_wobbly_circle(centre, radius * 0.13, dark, int(radius * 3 + offset[0] * 10), outline=2)
+                self.draw_wobbly_circle(centre, radius * .13, dark, int(radius * 3 + offset[0] * 10), outline=2)
 
     def draw_win_screen(self) -> None:
         overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
@@ -337,29 +276,29 @@ class Orbital:
         self.draw_text("WELCOME HOME, PILOT!", (640, 104), "#fff6d9", title=True, center=True)
         self.draw_text("Earth celebrates your return from Sector Three.", (640, 145), "#bde1e8", small=True, center=True)
 
-        # Earth in the corner.
+        # A hand-drawn Earth behind the homecoming ceremony.
         earth = pygame.Vector2(1030, 228)
         self.draw_wobbly_circle(earth, 86, pygame.Color("#70bfe1"), 91, outline=6)
-        for offset, size in [((-0.28, -0.13), 0.23), ((0.19, 0.11), 0.19), ((-0.03, 0.35), 0.16)]:
+        for offset, size in [((-.28, -.13), .23), ((.19, .11), .19), ((-.03, .35), .16)]:
             self.draw_wobbly_circle(earth + pygame.Vector2(offset[0] * 86, offset[1] * 86), 86 * size, pygame.Color("#91c879"), 93 + int(size * 10), outline=2)
 
-        # Crowd on both sides of the podium.
+        # The crowd: wobbly, bright, and visibly clapping around the pilot.
         for index in range(8):
             x = 135 + index * 112 if index < 4 else 795 + (index - 4) * 102
             y = 398 + int(math.sin(index * 2.4) * 12)
             body = pygame.Color(["#f19c9c", "#bd94e5", "#9bd681", "#f1c279"][index % 4])
             self.draw_wobbly_circle(pygame.Vector2(x, y - 42), 17, pygame.Color("#f3f0e8"), index + 70, outline=4)
-            pygame.draw.circle(self.screen, "#302c2c", (x - 5, y - 44), 3)  # eyes
+            pygame.draw.circle(self.screen, "#302c2c", (x - 5, y - 44), 3)
             pygame.draw.circle(self.screen, "#302c2c", (x + 6, y - 44), 3)
             body_rect = pygame.Rect(x - 21, y - 20, 42, 51)
             pygame.draw.rect(self.screen, "#302c2c", body_rect, border_radius=5)
             pygame.draw.rect(self.screen, body, body_rect.inflate(-8, -8), border_radius=4)
-            pygame.draw.line(self.screen, "#302c2c", (x - 18, y - 8), (x - 36, y - 37), 5)  # arms up
+            pygame.draw.line(self.screen, "#302c2c", (x - 18, y - 8), (x - 36, y - 37), 5)
             pygame.draw.line(self.screen, "#302c2c", (x + 18, y - 8), (x + 36, y - 37), 5)
-            pygame.draw.line(self.screen, "#302c2c", (x - 11, y + 27), (x - 15, y + 45), 5)  # legs
+            pygame.draw.line(self.screen, "#302c2c", (x - 11, y + 27), (x - 15, y + 45), 5)
             pygame.draw.line(self.screen, "#302c2c", (x + 11, y + 27), (x + 15, y + 45), 5)
 
-        # Pilot on the podium with a medal.
+        # Pilot on a podium with a gold medal. This uses the same chunky outline style.
         pygame.draw.polygon(self.screen, "#302c2c", [(518, 520), (762, 520), (724, 586), (556, 586)])
         pygame.draw.polygon(self.screen, "#e5b96c", [(527, 524), (753, 524), (717, 578), (563, 578)])
         self.draw_wobbly_circle(pygame.Vector2(640, 302), 37, pygame.Color("#f3f0e8"), 119, outline=6)
@@ -370,7 +309,7 @@ class Orbital:
         pygame.draw.rect(self.screen, "#77a8c7", (615, 360, 50, 34), border_radius=4)
         pygame.draw.line(self.screen, "#302c2c", (620, 468), (611, 519), 8)
         pygame.draw.line(self.screen, "#302c2c", (660, 468), (669, 519), 8)
-        pygame.draw.line(self.screen, "#d44956", (621, 340), (640, 393), 6)  # medal ribbon
+        pygame.draw.line(self.screen, "#d44956", (621, 340), (640, 393), 6)
         pygame.draw.line(self.screen, "#4776c5", (659, 340), (640, 393), 6)
         self.draw_wobbly_circle(pygame.Vector2(640, 402), 16, pygame.Color("#f4c64e"), 120, outline=4)
         self.draw_text("MEDAL OF ORBIT", (640, 628), "#fff6d9", small=True, center=True)
@@ -378,14 +317,14 @@ class Orbital:
 
     def run(self) -> None:
         while True:
-            delta = self.clock.tick(FPS) / 1000.0  # seconds since last frame
+            delta = self.clock.tick(FPS) / 1000.0
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     sys.exit()
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
-                        self.load_level()  # restart current sector
+                        self.load_level()
                     if event.key == pygame.K_m and self.music_tracks:
                         if pygame.mixer.get_busy():
                             pygame.mixer.pause()
