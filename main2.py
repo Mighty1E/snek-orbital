@@ -99,6 +99,8 @@ class Orbital:
         self.music_volume = 0.45
         self.settings_return = "title"
         self.menu_buttons = {}
+        self.has_collected_core = False
+        self.shooting_stars = []
         self.load_level()
         pygame.mixer.music.stop()
 
@@ -218,7 +220,11 @@ class Orbital:
 
         # Reset the player's progress and game state.
         self.fuel = float(self.fuel_setting)
-        self.message = "Collect every energy core, then reach the gate."
+        self.message = (
+            "Reach the gate after collecting every core."
+            if self.has_collected_core
+            else "Collect energy cores to refill fuel, then reach the gate."
+        )
         self.dead = False
         self.won = False
         self.game_complete = False
@@ -331,6 +337,7 @@ class Orbital:
             if self.ship_position.distance_to(core) < 28:
                 self.cores.remove(core)
                 self.fuel = min(100.0, self.fuel + 18.0)
+                self.has_collected_core = True
                 self.message = "Core collected. Fuel restored."
 
         # Finish the level when all cores have been collected.
@@ -466,21 +473,47 @@ class Orbital:
                 small=True,
             )
 
-        # Draw the fuel bar.
-        self.draw_text("FUEL", (34, 642), "#d9edff", small=True)
+        # Make the fuel level easy to read at a glance.
+        fuel_colour = (
+            "#5fe1a8" if self.fuel > 30
+            else "#ffcf5c" if self.fuel > 15
+            else "#ff6b6b"
+        )
+        fuel_bar = pygame.Rect(130, 625, 220, 18)
+        self.draw_text(
+            f"FUEL {int(self.fuel)}%",
+            (fuel_bar.left, fuel_bar.top - 25),
+            fuel_colour,
+            small=True,
+        )
 
         pygame.draw.rect(
             self.screen,
             "#1c3248",
-            (94, 625, 220, 18),
+            fuel_bar,
             border_radius=5,
         )
         pygame.draw.rect(
             self.screen,
-            "#5fe1a8",
-            (94, 625, int(220 * self.fuel / 100), 18),
+            fuel_colour,
+            (fuel_bar.left, fuel_bar.top, int(fuel_bar.width * min(self.fuel, 100) / 100), fuel_bar.height),
             border_radius=5,
         )
+
+        if self.fuel <= 10:
+            fuel_warning = "CRITICAL FUEL! COLLECT A CORE!"
+        elif self.fuel <= 25:
+            fuel_warning = "LOW FUEL: COLLECT CORES TO REFILL"
+        else:
+            fuel_warning = ""
+
+        if fuel_warning:
+            self.draw_text(
+                fuel_warning,
+                (fuel_bar.right + 16, fuel_bar.centery - 10),
+                fuel_colour,
+                small=True,
+            )
 
         # Display the controls and current message.
         self.draw_text(
@@ -489,13 +522,14 @@ class Orbital:
             "#86a4bd",
             small=True,
         )
-        self.draw_text(
-            self.message,
-            (640, 671),
-            "#fff3cf",
-            small=True,
-            center=True,
-        )
+        if not (self.has_collected_core and self.message.startswith("Collect energy cores")):
+            self.draw_text(
+                self.message,
+                (640, 671),
+                "#fff3cf",
+                small=True,
+                center=True,
+            )
 
         # Show the correct screen when the level ends.
         if self.game_complete:
@@ -533,16 +567,32 @@ class Orbital:
     def draw_menu_button(self, label, rect, key, selected=False):
         rect = pygame.Rect(rect)
         self.menu_buttons[key] = rect
-        fill = "#21415a" if selected else "#12283b"
-        border = "#75d7e8" if selected else "#38566d"
+        hovered = rect.collidepoint(pygame.mouse.get_pos())
+        pulse = (math.sin(pygame.time.get_ticks() / 180) + 1) * 0.5
+        fill = "#21415a" if selected or hovered else "#12283b"
+        border = "#75d7e8" if selected or hovered else "#38566d"
         pygame.draw.rect(self.screen, fill, rect, border_radius=10)
-        pygame.draw.rect(self.screen, border, rect, width=2, border_radius=10)
-        self.draw_text(label, rect.center, "#edf8ff", center=True)
+        pygame.draw.rect(self.screen, border, rect, width=2 if not hovered else 2 + int(pulse), border_radius=10)
+        if hovered:
+            glow = pygame.Surface((rect.width + 10, rect.height + 10), pygame.SRCALPHA)
+            pygame.draw.rect(glow, (95, 205, 235, 28 + int(pulse * 22)), glow.get_rect(), border_radius=13)
+            self.screen.blit(glow, (rect.x - 5, rect.y - 5))
+        text_y = rect.centery - (2 if hovered else 0)
+        self.draw_text(label, (rect.centerx, text_y), "#edf8ff", center=True)
 
     def draw_menu_screen(self):
         self.screen.fill("#07111f")
         for x, y, radius in self.stars:
             pygame.draw.circle(self.screen, "#9bb9d5", (x, y), max(1, radius // 2))
+        # Occasional shooting stars glide diagonally through the same pixel-star sky.
+        ticks = pygame.time.get_ticks()
+        for index in range(5):
+            phase = (ticks * (0.22 + index * 0.025) + index * 317) % (WIDTH + 220)
+            star_x = int(phase - 110)
+            star_y = int(55 + index * 129 + math.sin(ticks / 650 + index) * 24)
+            tail = 22 + index * 3
+            pygame.draw.line(self.screen, "#527d9d", (star_x - tail, star_y + tail // 2), (star_x, star_y), 2)
+            pygame.draw.circle(self.screen, "#d9edff", (star_x, star_y), 2 if index % 2 else 3)
         self.menu_buttons = {}
 
         if self.screen_state == "title":
@@ -1100,6 +1150,7 @@ class Orbital:
                     elif self.screen_state == "tutorial":
                         if event.key in (pygame.K_RETURN, pygame.K_SPACE):
                             self.tutorial_seen = True
+                            self.tutorial_flag.touch(exist_ok=True)
                             self.screen_state = "game"
                     else:
                         # Restart the current sector.
