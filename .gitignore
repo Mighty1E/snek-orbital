@@ -1,4 +1,4 @@
 ﻿__pycache__/
 *.py[cod]
-.orbital_tutorial_seen
-snek-orbital.code-workspace
+*.orbital_tutorial_seen
+*snek-orbital.code-workspace
