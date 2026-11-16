@@ -7,16 +7,6 @@ three dangerous sectors. Collect every energy core, manage your fuel, use
 planetary gravity to navigate, avoid crashing, and reach the exit gate to
 make it home.
 
-SETUP
------
-1. Install Python 3.12 or later from https://www.python.org/downloads/
-   During installation, select "Add Python to PATH".
-2. Open this folder in Cursor or a terminal.
-3. Install the game dependency:
-   python -m pip install -r requirements.txt
-4. Run the game:
-   python main2.py
-
 CONTROLS
 --------
 WASD / Arrow Keys  - Thrust and steer
